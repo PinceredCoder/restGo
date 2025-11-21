@@ -120,13 +120,9 @@ func (r *MongoTaskRepository) Update(ctx context.Context, id uuid.UUID, task *Ta
 		},
 	}
 
-	result, err := r.collection.UpdateOne(ctx, filter, update)
+	_, err := r.collection.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return fmt.Errorf("failed to update task: %w", err)
-	}
-
-	if result.MatchedCount == 0 {
-		return nil
 	}
 
 	return nil
@@ -137,13 +133,9 @@ func (r *MongoTaskRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	defer cancel()
 
 	filter := bson.M{"_id": id}
-	result, err := r.collection.DeleteOne(ctx, filter)
+	_, err := r.collection.DeleteOne(ctx, filter)
 	if err != nil {
 		return fmt.Errorf("failed to delete task: %w", err)
-	}
-
-	if result.DeletedCount == 0 {
-		return nil
 	}
 
 	return nil

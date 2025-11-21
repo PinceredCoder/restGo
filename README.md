@@ -1,4 +1,4 @@
-# RestGo - Task Management API
+# restGo - Task Management API
 
 A RESTful API service for task management built with Go, featuring Protocol Buffers for data validation and serialization.
 

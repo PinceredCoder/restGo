@@ -3,7 +3,7 @@ package handlers
 import (
 	"strings"
 
-	"github.com/PinceredCoder/RestGo/internal/errors"
+	"github.com/PinceredCoder/restGo/internal/errors"
 )
 
 func (h *TaskHandler) convertValidationError(err error) *errors.APIError {

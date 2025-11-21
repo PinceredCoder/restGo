@@ -3,40 +3,40 @@ package handlers
 import (
 	"io"
 	"net/http"
-	"sync"
 
-	tasks "github.com/PinceredCoder/RestGo/api/proto/v1"
-	"github.com/PinceredCoder/RestGo/internal/errors"
+	tasks "github.com/PinceredCoder/restGo/api/proto/v1"
+	"github.com/PinceredCoder/restGo/internal/database"
+	"github.com/PinceredCoder/restGo/internal/errors"
+	"github.com/PinceredCoder/restGo/internal/helpers"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// TODO: add logs for InternalServerError cases
+
 type TaskHandler struct {
-	mu    sync.RWMutex
-	tasks map[uuid.UUID]*tasks.Task
+	db database.Database
 }
 
-func NewTaskHandler() *TaskHandler {
-	return &TaskHandler{
-		tasks: make(map[uuid.UUID]*tasks.Task),
-	}
+func NewTaskHandler(db database.Database) *TaskHandler {
+	return &TaskHandler{db: db}
 }
 
 func (h *TaskHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Read lock: multiple readers can access simultaneously
-	h.mu.RLock()
-	taskList := make([]*tasks.Task, 0, len(h.tasks))
-	for _, task := range h.tasks {
-		taskList = append(taskList, task)
+	taskList, err := h.db.GetTaskRepository().FindAll(r.Context())
+
+	if err != nil {
+		errors.RespondWithError(w, http.StatusInternalServerError,
+			errors.NewInternalError("Failed to retrieve tasks"))
+		return
 	}
-	h.mu.RUnlock()
 
 	response := &tasks.ListTasksResponse{
-		Tasks: taskList,
+		Tasks: helpers.Map(taskList, func(t *database.Task) *tasks.Task { return t.ToProto() }),
 	}
 
 	data, err := protojson.Marshal(response)
@@ -70,11 +70,11 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := timestamppb.Now()
+	now := timestamppb.Now().AsTime().Unix()
 	taskID := uuid.New()
 
-	task := &tasks.Task{
-		Id:          taskID.String(),
+	taskDb := &database.Task{
+		ID:          taskID,
 		Title:       req.Title,
 		Description: req.Description,
 		Completed:   false,
@@ -82,13 +82,14 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:   now,
 	}
 
-	// Write lock: exclusive access for map modification
-	h.mu.Lock()
-	h.tasks[taskID] = task
-	h.mu.Unlock()
+	if err := h.db.GetTaskRepository().Create(r.Context(), taskDb); err != nil {
+		errors.RespondWithError(w, http.StatusInternalServerError,
+			errors.NewInternalError("Failed to create task"))
+		return
+	}
 
 	response := &tasks.GetTaskResponse{
-		Task: task,
+		Task: taskDb.ToProto(),
 	}
 
 	data, err = protojson.Marshal(response)
@@ -113,19 +114,21 @@ func (h *TaskHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read lock: allows concurrent reads
-	h.mu.RLock()
-	task, exists := h.tasks[id]
-	h.mu.RUnlock()
+	taskDb, err := h.db.GetTaskRepository().FindByID(r.Context(), id)
+	if err != nil {
+		errors.RespondWithError(w, http.StatusInternalServerError,
+			errors.NewInternalError("Failed to retrieve task"))
+		return
+	}
 
-	if !exists {
+	if taskDb == nil {
 		errors.RespondWithError(w, http.StatusNotFound,
 			errors.NewNotFoundError("Task not found"))
 		return
 	}
 
 	response := &tasks.GetTaskResponse{
-		Task: task,
+		Task: taskDb.ToProto(),
 	}
 
 	data, err := protojson.Marshal(response)
@@ -169,11 +172,13 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Write lock: modifying task data
-	h.mu.Lock()
-	task, exists := h.tasks[id]
-	if !exists {
-		h.mu.Unlock()
+	task, err := h.db.GetTaskRepository().FindByID(r.Context(), id)
+	if err != nil {
+		errors.RespondWithError(w, http.StatusInternalServerError,
+			errors.NewInternalError("Failed to retrieve task"))
+		return
+	}
+	if task == nil {
 		errors.RespondWithError(w, http.StatusNotFound,
 			errors.NewNotFoundError("Task not found"))
 		return
@@ -186,11 +191,16 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		task.Completed = *req.Completed
 	}
 
-	task.UpdatedAt = timestamppb.Now()
-	h.mu.Unlock()
+	task.UpdatedAt = timestamppb.Now().AsTime().Unix()
+
+	if err := h.db.GetTaskRepository().Update(r.Context(), id, task); err != nil {
+		errors.RespondWithError(w, http.StatusInternalServerError,
+			errors.NewInternalError("Failed to update task"))
+		return
+	}
 
 	response := &tasks.GetTaskResponse{
-		Task: task,
+		Task: task.ToProto(),
 	}
 
 	data, err = protojson.Marshal(response)
@@ -214,18 +224,11 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Write lock: deleting from map
-	h.mu.Lock()
-	_, exists := h.tasks[id]
-	if !exists {
-		h.mu.Unlock()
-		errors.RespondWithError(w, http.StatusNotFound,
-			errors.NewNotFoundError("Task not found"))
+	if err := h.db.GetTaskRepository().Delete(r.Context(), id); err != nil {
+		errors.RespondWithError(w, http.StatusInternalServerError,
+			errors.NewInternalError("Failed to delete task"))
 		return
 	}
-
-	delete(h.tasks, id)
-	h.mu.Unlock()
 
 	w.WriteHeader(http.StatusNoContent)
 }

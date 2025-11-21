@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
 
-	"github.com/PinceredCoder/RestGo/internal/handlers"
+	"github.com/PinceredCoder/restGo/internal/database"
+	"github.com/PinceredCoder/restGo/internal/handlers"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -15,7 +18,13 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	taskHandler := handlers.NewTaskHandler()
+	db, err := database.NewMongoDatabase(context.Background(), "mongodb://127.0.0.1:27017", "tasks")
+	if err != nil {
+		log.Fatalf("Failed to connect to DB: %v", err)
+	}
+	defer db.Disconnect(context.Background())
+
+	taskHandler := handlers.NewTaskHandler(db)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/tasks", func(r chi.Router) {

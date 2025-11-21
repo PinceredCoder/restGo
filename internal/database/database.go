@@ -2,8 +2,11 @@ package database
 
 import (
 	"context"
+	"time"
 
+	tasks "github.com/PinceredCoder/restGo/api/proto/v1"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Database interface {
@@ -27,4 +30,15 @@ type Task struct {
 	Completed   bool      `bson:"completed"`
 	CreatedAt   int64     `bson:"createdAt"`
 	UpdatedAt   int64     `bson:"updatedAt"`
+}
+
+func (t *Task) ToProto() *tasks.Task {
+	return &tasks.Task{
+		Id:          t.ID.String(),
+		Title:       t.Title,
+		Description: t.Description,
+		Completed:   t.Completed,
+		CreatedAt:   timestamppb.New(time.Unix(t.CreatedAt, 0)),
+		UpdatedAt:   timestamppb.New(time.Unix(t.UpdatedAt, 0)),
+	}
 }
