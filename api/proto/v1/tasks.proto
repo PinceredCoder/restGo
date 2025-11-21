@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package tasks;
 
-option go_package = "github.com/PinceredCoder/RestGo/api/proto/v1;tasks";
+option go_package = "github.com/PinceredCoder/restGo/api/proto/v1;tasks";
 
 import "google/protobuf/timestamp.proto";
 import "validate/validate.proto";

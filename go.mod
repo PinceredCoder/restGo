@@ -1,4 +1,4 @@
-module github.com/PinceredCoder/RestGo
+module github.com/PinceredCoder/restGo
 
 go 1.25.4
 
